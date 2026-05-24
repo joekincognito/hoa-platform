@@ -1,5 +1,17 @@
 import { format, isSameDay } from "date-fns";
 
+/**
+ * Supabase-js infers FK relationships as arrays by default (even when the
+ * SQL guarantees one row). This helper picks the first row from either form.
+ */
+export function pickOne<T extends object>(
+  rel: T | T[] | null | undefined
+): T | null {
+  if (!rel) return null;
+  if (Array.isArray(rel)) return rel[0] ?? null;
+  return rel;
+}
+
 export function formatEventDateRange(
   start: string | Date,
   end?: string | Date | null
