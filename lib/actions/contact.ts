@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email/send";
+import { ContactFormSubmittedEmail } from "@/emails/ContactFormSubmitted";
 
 const ContactSchema = z.object({
   first_name: z.string().trim().min(1, "First name is required").max(80),
@@ -49,7 +51,22 @@ export async function submitContactForm(
     return { ok: false, error: "Couldn't save your message. Please try again." };
   }
 
-  // TODO Phase 2: email the board via Resend (contact_form_submitted template).
+  // Notify the board. Failures don't block user-visible success — the row
+  // is in the DB and shows up in /admin/contact regardless.
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (adminEmail) {
+    await sendEmail({
+      template: "contact_form_submitted",
+      to: adminEmail,
+      subject: `New contact form message from ${parsed.data.first_name}`,
+      body: ContactFormSubmittedEmail({
+        firstName: parsed.data.first_name,
+        lastName: parsed.data.last_name || null,
+        email: parsed.data.email,
+        message: parsed.data.message,
+      }),
+    }).catch((e) => console.error("contact form email failed", e));
+  }
 
   return { ok: true };
 }
