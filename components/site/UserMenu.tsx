@@ -14,7 +14,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 export function UserMenu({
   email,
@@ -45,16 +46,17 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={
-          <Button variant="outline" size="sm" className="gap-1">
-            <User className="h-4 w-4" />
-            <span className="hidden max-w-[140px] truncate sm:inline">
-              {email}
-            </span>
-            <ChevronDown className="h-3 w-3 opacity-60" />
-          </Button>
-        }
-      />
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          "gap-1"
+        )}
+      >
+        <User className="h-4 w-4" />
+        <span className="hidden max-w-[140px] truncate sm:inline">
+          {email}
+        </span>
+        <ChevronDown className="h-3 w-3 opacity-60" />
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="font-normal">
