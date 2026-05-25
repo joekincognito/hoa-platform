@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, User } from "lucide-react";
+import {
+  Bell,
+  ChevronDown,
+  FileText,
+  LogOut,
+  Shield,
+  TreePine,
+  User,
+  Users,
+  ShieldAlert,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +24,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function UserMenu({ email }: { email: string }) {
+export function UserMenu({
+  email,
+  isAdmin,
+  isApproved,
+}: {
+  email: string;
+  isAdmin: boolean;
+  isApproved: boolean;
+}) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -27,27 +45,74 @@ export function UserMenu({ email }: { email: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-1">
             <User className="h-4 w-4" />
-            <span className="max-w-[140px] truncate">{email}</span>
+            <span className="hidden max-w-[140px] truncate sm:inline">
+              {email}
+            </span>
+            <ChevronDown className="h-3 w-3 opacity-60" />
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Signed in</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel className="font-normal">
+          <p className="text-xs text-muted-foreground">Signed in as</p>
+          <p className="truncate text-sm font-medium">{email}</p>
+          {!isApproved && (
+            <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+              Pending board approval
+            </p>
+          )}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href="/documents" />}>
-          Documents
+
+        <DropdownMenuItem render={<Link href="/profile" />}>
+          <User className="mr-2 h-4 w-4" />
+          Profile
         </DropdownMenuItem>
-        <DropdownMenuItem render={<Link href="/directory" />}>
-          Directory
-        </DropdownMenuItem>
-        <DropdownMenuItem render={<Link href="/my-requests" />}>
-          My requests
-        </DropdownMenuItem>
+
+        {isApproved && (
+          <>
+            <DropdownMenuItem render={<Link href="/documents" />}>
+              <FileText className="mr-2 h-4 w-4" />
+              Documents
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/directory" />}>
+              <Users className="mr-2 h-4 w-4" />
+              Resident directory
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/my-requests" />}>
+              <TreePine className="mr-2 h-4 w-4" />
+              My requests
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/my-violations" />}>
+              <ShieldAlert className="mr-2 h-4 w-4" />
+              My violations
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/notifications" />}>
+              <Bell className="mr-2 h-4 w-4" />
+              Notifications
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              Board
+            </DropdownMenuLabel>
+            <DropdownMenuItem render={<Link href="/admin" />}>
+              <Shield className="mr-2 h-4 w-4" />
+              Admin dashboard
+            </DropdownMenuItem>
+          </>
+        )}
+
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-          <LogOut className="mr-2 h-4 w-4" /> Sign out
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -66,9 +66,11 @@ export async function setAdminAction(formData: FormData) {
 
   const { supabase, actor } = await requireAdmin();
 
-  // Refuse to demote yourself (avoids accidentally locking out the last admin)
+  // Refuse to demote yourself (avoids accidentally locking out the last admin).
+  // Return silently instead of throwing — the UI hides this button on the
+  // viewer's own row, so reaching here means hand-crafted POST or a stale page.
   if (parsed.data.user_id === actor.id && parsed.data.make_admin === "false") {
-    throw new Error("You can't remove your own admin access.");
+    return;
   }
 
   await supabase

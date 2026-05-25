@@ -18,6 +18,18 @@ export async function Header() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let isAdmin = false;
+  let isApproved = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin, is_approved")
+      .eq("id", user.id)
+      .maybeSingle();
+    isAdmin = Boolean(profile?.is_admin);
+    isApproved = Boolean(profile?.is_approved);
+  }
+
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -41,7 +53,11 @@ export async function Header() {
 
         <div className="flex items-center gap-3">
           {user ? (
-            <UserMenu email={user.email ?? ""} />
+            <UserMenu
+              email={user.email ?? ""}
+              isAdmin={isAdmin}
+              isApproved={isApproved}
+            />
           ) : (
             <Button
               render={<Link href="/auth/login" />}

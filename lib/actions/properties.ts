@@ -158,18 +158,38 @@ function parseCsv(input: string) {
 }
 
 const FIELD_ALIASES: Record<string, keyof z.infer<typeof PropertySchema>> = {
+  // address
   address: "address",
   street: "address",
   "street address": "address",
+  street_address: "address",
+
+  // homeowner name
   name: "homeowner_name",
   homeowner: "homeowner_name",
+  homeowner_name: "homeowner_name",
   "homeowner name": "homeowner_name",
   owner: "homeowner_name",
+  owner_name: "homeowner_name",
+  "owner name": "homeowner_name",
+
+  // email
   email: "homeowner_email",
+  homeowner_email: "homeowner_email",
   "homeowner email": "homeowner_email",
+  owner_email: "homeowner_email",
+  "owner email": "homeowner_email",
+
+  // phone
   phone: "homeowner_phone",
+  homeowner_phone: "homeowner_phone",
   "homeowner phone": "homeowner_phone",
+  owner_phone: "homeowner_phone",
+  "owner phone": "homeowner_phone",
+
+  // notes
   notes: "notes",
+  note: "notes",
 };
 
 export async function previewCsvAction(

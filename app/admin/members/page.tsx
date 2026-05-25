@@ -31,6 +31,10 @@ type Props = {
 export default async function AdminMembersPage({ searchParams }: Props) {
   const { filter = "all" } = await searchParams;
   const supabase = await createClient();
+  const {
+    data: { user: viewer },
+  } = await supabase.auth.getUser();
+  const viewerId = viewer?.id;
 
   let q = supabase
     .from("profiles")
@@ -148,7 +152,7 @@ export default async function AdminMembersPage({ searchParams }: Props) {
                               Approve
                             </Button>
                           </form>
-                        ) : (
+                        ) : m.id !== viewerId ? (
                           <form action={revokeMemberAction}>
                             <input
                               type="hidden"
@@ -163,22 +167,24 @@ export default async function AdminMembersPage({ searchParams }: Props) {
                               Revoke
                             </Button>
                           </form>
+                        ) : null}
+                        {m.id !== viewerId && (
+                          <form action={setAdminAction}>
+                            <input type="hidden" name="user_id" value={m.id} />
+                            <input
+                              type="hidden"
+                              name="make_admin"
+                              value={m.is_admin ? "false" : "true"}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              type="submit"
+                            >
+                              {m.is_admin ? "Remove admin" : "Make admin"}
+                            </Button>
+                          </form>
                         )}
-                        <form action={setAdminAction}>
-                          <input type="hidden" name="user_id" value={m.id} />
-                          <input
-                            type="hidden"
-                            name="make_admin"
-                            value={m.is_admin ? "false" : "true"}
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="submit"
-                          >
-                            {m.is_admin ? "Remove admin" : "Make admin"}
-                          </Button>
-                        </form>
                       </div>
                     </TableCell>
                   </TableRow>
