@@ -24,6 +24,11 @@ const SignupSchema = z.object({
   email: Email,
   password: Password,
   full_name: z.string().trim().min(1, "Full name required").max(120),
+  address: z
+    .string()
+    .trim()
+    .min(1, "Home address required")
+    .max(300, "Address too long"),
 });
 
 const ForgotSchema = z.object({ email: Email });
@@ -77,6 +82,7 @@ export async function signupAction(
     email: formData.get("email"),
     password: formData.get("password"),
     full_name: formData.get("full_name"),
+    address: formData.get("address"),
   });
   if (!parsed.success) {
     return { ok: false, fieldErrors: fmtFieldErrors(parsed.error) };
@@ -85,12 +91,18 @@ export async function signupAction(
   const supabase = await createClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
+  // The handle_new_user trigger picks both full_name AND address out of
+  // raw_user_meta_data and writes them to profiles, plus auto-links to
+  // a matching property row if one exists. So passing them here is enough.
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       emailRedirectTo: `${siteUrl}/auth/callback`,
-      data: { full_name: parsed.data.full_name },
+      data: {
+        full_name: parsed.data.full_name,
+        address: parsed.data.address,
+      },
     },
   });
 

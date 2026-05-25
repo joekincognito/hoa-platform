@@ -104,15 +104,27 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
             )}
           </div>
           <div className="sm:col-span-2">
-            <Label htmlFor="address">Home address</Label>
+            <Label htmlFor="address">
+              Home address <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="address"
               name="address"
+              required
               defaultValue={initial?.address ?? ""}
               maxLength={300}
               placeholder="123 Main Street"
               className="mt-1"
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              If your address matches our property registry, your account
+              auto-links to that property.
+            </p>
+            {state?.fieldErrors?.address && (
+              <p className="mt-1 text-xs text-destructive">
+                {state.fieldErrors.address}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="phone">Phone (display)</Label>

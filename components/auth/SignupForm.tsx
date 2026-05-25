@@ -56,6 +56,28 @@ export function SignupForm() {
         )}
       </div>
       <div>
+        <Label htmlFor="address">Home address in the HOA</Label>
+        <Input
+          id="address"
+          name="address"
+          type="text"
+          required
+          maxLength={300}
+          autoComplete="street-address"
+          placeholder="123 Main Street"
+          className="mt-1"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          If your address is in our property registry, your account will be
+          linked to it automatically.
+        </p>
+        {state?.fieldErrors?.address && (
+          <p className="mt-1 text-xs text-destructive">
+            {state.fieldErrors.address}
+          </p>
+        )}
+      </div>
+      <div>
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"

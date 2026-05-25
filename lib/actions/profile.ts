@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { autoLinkProfileToProperty } from "@/lib/actions/auto-link";
 
 const ProfileSchema = z.object({
   full_name: z.string().trim().min(1, "Full name required").max(120),
-  address: z.string().trim().max(300).optional().or(z.literal("")),
+  address: z.string().trim().min(1, "Home address required").max(300),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   sms_phone: z.string().trim().max(40).optional().or(z.literal("")),
   show_in_directory: z.coerce.boolean(),
@@ -76,14 +77,18 @@ export async function updateProfileAction(
 
   const d = parsed.data;
 
-  // Reset sms_phone_verified if phone number changed
+  // Reset sms_phone_verified if phone number changed; also remember the old
+  // address so we know whether to re-attempt property auto-linking.
   const { data: existing } = await supabase
     .from("profiles")
-    .select("sms_phone")
+    .select("sms_phone, address")
     .eq("id", user.id)
     .maybeSingle();
 
   const phoneChanged = (existing?.sms_phone ?? "") !== (d.sms_phone ?? "");
+  const addressChanged =
+    (existing?.address ?? "").trim().toLowerCase() !==
+    d.address.trim().toLowerCase();
 
   const updates: Record<string, unknown> = {
     full_name: d.full_name,
@@ -115,6 +120,18 @@ export async function updateProfileAction(
     .eq("id", user.id);
 
   if (error) return { ok: false, error: "Couldn't save your profile." };
+
+  // If the address just changed (or was set for the first time), try to
+  // link the profile to a matching property in the registry. Best-effort:
+  // failure (or no match) is fine — the user can still have an address
+  // that isn't in the registry.
+  if (addressChanged) {
+    await autoLinkProfileToProperty(user.id, d.address).catch((e) =>
+      console.error("auto-link failed", e)
+    );
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/properties");
+  }
 
   revalidatePath("/profile");
   return { ok: true };
