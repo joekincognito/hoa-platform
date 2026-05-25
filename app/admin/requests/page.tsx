@@ -20,10 +20,8 @@ import {
   REQUEST_STATUS_LABEL,
   REQUEST_TYPE_LABEL,
   REQUEST_STATUSES,
-  REQUEST_TYPES,
   statusBadgeClass,
   type RequestStatus,
-  type RequestType,
 } from "@/lib/workflow/requests";
 
 export const metadata = { title: "Requests | Admin" };
@@ -58,12 +56,16 @@ export default async function AdminRequestsPage({
     q = q.eq("status", statusFilter);
   }
 
-  if (REQUEST_TYPES.includes(typeFilter as RequestType)) {
+  // Look up dynamic type keys for category-based filters
+  if (typeFilter === "tree" || typeFilter === "arc") {
+    const { data: keys } = await supabase
+      .from("request_types")
+      .select("key")
+      .eq("category", typeFilter);
+    const keyList = (keys ?? []).map((k) => k.key);
+    if (keyList.length > 0) q = q.in("type", keyList);
+  } else if (typeFilter !== "all") {
     q = q.eq("type", typeFilter);
-  } else if (typeFilter === "tree") {
-    q = q.in("type", ["tree_hoa_removal", "tree_homeowner_permission"]);
-  } else if (typeFilter === "arc") {
-    q = q.like("type", "arc_%");
   }
 
   const { data: rows, error } = await q;
@@ -174,7 +176,7 @@ export default async function AdminRequestsPage({
                       </Link>
                     </TableCell>
                     <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                      {REQUEST_TYPE_LABEL[r.type as RequestType]}
+                      {REQUEST_TYPE_LABEL[r.type] ?? r.type}
                     </TableCell>
                     <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
                       {r.submitter_name ?? r.submitter_email ?? "—"}

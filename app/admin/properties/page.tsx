@@ -36,6 +36,42 @@ export default async function PropertiesPage({
 
   const { data: rows, error } = await query;
 
+  // Resolve linked-user names + emails via service-role lookup so admins
+  // can see at a glance which member-of-record owns each property.
+  const linkedUserMap = new Map<string, { name: string | null; email: string | null }>();
+  const linkedUserIds = Array.from(
+    new Set(
+      (rows ?? []).map((r) => r.linked_user_id).filter(Boolean) as string[]
+    )
+  );
+  if (linkedUserIds.length > 0) {
+    const { createClient: createServiceClient } = await import(
+      "@supabase/supabase-js"
+    );
+    const admin = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", linkedUserIds);
+    for (const p of profs ?? []) {
+      linkedUserMap.set(p.id, { name: p.full_name, email: null });
+    }
+    const { data: users } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    for (const u of users?.users ?? []) {
+      if (linkedUserMap.has(u.id)) {
+        const cur = linkedUserMap.get(u.id)!;
+        linkedUserMap.set(u.id, { ...cur, email: u.email ?? null });
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex items-end justify-between">
@@ -102,11 +138,18 @@ export default async function PropertiesPage({
                   <TableHead className="hidden md:table-cell">
                     Contact
                   </TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    Linked account
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows!.map((r) => (
+                {rows!.map((r) => {
+                  const linked = r.linked_user_id
+                    ? linkedUserMap.get(r.linked_user_id)
+                    : null;
+                  return (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.address}</TableCell>
                     <TableCell>
@@ -119,6 +162,22 @@ export default async function PropertiesPage({
                     <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
                       <div>{r.homeowner_email ?? "—"}</div>
                       <div>{r.homeowner_phone ?? ""}</div>
+                    </TableCell>
+                    <TableCell className="hidden text-sm md:hidden lg:table-cell">
+                      {linked ? (
+                        <div className="text-muted-foreground">
+                          <div className="font-medium text-foreground">
+                            {linked.name ?? "—"}
+                          </div>
+                          {linked.email && (
+                            <div className="text-xs">{linked.email}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs italic text-muted-foreground">
+                          (no account)
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -142,7 +201,8 @@ export default async function PropertiesPage({
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

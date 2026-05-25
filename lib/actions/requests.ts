@@ -9,14 +9,14 @@ import { RequestSubmittedEmail } from "@/emails/RequestSubmitted";
 import { RequestStatusChangeEmail } from "@/emails/RequestStatusChange";
 import {
   ALLOWED_TRANSITIONS,
-  REQUEST_TYPES,
   REQUEST_STATUSES,
   REQUEST_TYPE_LABEL,
-  type RequestType,
 } from "@/lib/workflow/requests";
 
 const NewRequestSchema = z.object({
-  type: z.enum(REQUEST_TYPES),
+  // Request types are now stored in the request_types table; we validate
+  // the FK at insert time instead of enum-checking here.
+  type: z.string().min(1, "Pick a request type").max(80),
   address: z.string().trim().min(1, "Address required").max(300),
   title: z.string().trim().min(3, "Title too short").max(200),
   description: z.string().trim().min(10, "Please describe the request").max(5000),
@@ -139,11 +139,11 @@ export async function createRequestAction(
     await sendEmail({
       template: "request_submitted",
       to: user.email,
-      subject: `We received your ${REQUEST_TYPE_LABEL[parsed.data.type as RequestType].toLowerCase()} request`,
+      subject: `We received your ${(REQUEST_TYPE_LABEL[parsed.data.type] ?? parsed.data.type).toLowerCase()} request`,
       body: RequestSubmittedEmail({
         submitterName: profile.full_name,
         requestTitle: parsed.data.title,
-        requestType: REQUEST_TYPE_LABEL[parsed.data.type as RequestType],
+        requestType: (REQUEST_TYPE_LABEL[parsed.data.type] ?? parsed.data.type),
         viewUrl: `${siteUrl}/my-requests/${created.id}`,
       }),
       relatedEntityType: "request",

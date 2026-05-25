@@ -53,7 +53,7 @@ export async function loginAction(
   const parsed = LoginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
-    next: formData.get("next"),
+    next: formData.get("next") ?? undefined,
   });
   if (!parsed.success) {
     return { ok: false, fieldErrors: fmtFieldErrors(parsed.error) };

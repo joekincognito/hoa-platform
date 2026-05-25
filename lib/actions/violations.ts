@@ -138,6 +138,97 @@ export async function reportViolationAction(
   redirect(`/my-violations?reported=1`);
 }
 
+// --------------------------- Admin: create directly -------------------------
+
+const AdminCreateSchema = z.object({
+  property_id: z.string().uuid("Pick a property"),
+  category: z.enum(VIOLATION_CATEGORIES),
+  description: z.string().trim().min(10, "Please describe the issue").max(5000),
+});
+
+export type AdminCreateState = {
+  ok: boolean;
+  error?: string;
+  fieldErrors?: Record<string, string>;
+  violationId?: string;
+};
+
+export async function adminCreateViolationAction(
+  _prev: AdminCreateState | undefined,
+  formData: FormData
+): Promise<AdminCreateState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not logged in." };
+
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("is_admin, full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!me?.is_admin) return { ok: false, error: "Not an admin." };
+
+  const parsed = AdminCreateSchema.safeParse({
+    property_id: formData.get("property_id"),
+    category: formData.get("category"),
+    description: formData.get("description"),
+  });
+  if (!parsed.success) return { ok: false, fieldErrors: fieldErrorsFromZod(parsed.error) };
+
+  const { data: created, error } = await supabase
+    .from("violations")
+    .insert({
+      property_id: parsed.data.property_id,
+      category: parsed.data.category,
+      description: parsed.data.description,
+      reported_by: user.id,
+      reporter_name: me.full_name,
+      status: "pending_review",
+    })
+    .select("id")
+    .single();
+  if (error || !created) {
+    return { ok: false, error: error?.message ?? "Couldn't create violation." };
+  }
+
+  // Photos
+  const files = formData.getAll("files") as File[];
+  for (const file of files) {
+    if (!file || typeof file === "string" || file.size === 0) continue;
+    if (file.size > 20 * 1024 * 1024) continue;
+    const ext = file.name.split(".").pop() || "bin";
+    const path = `violations/${created.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("attachments")
+      .upload(path, file, { upsert: false, contentType: file.type });
+    if (upErr) {
+      console.error("violation attachment upload failed", upErr);
+      continue;
+    }
+    await supabase.from("attachments").insert({
+      entity_type: "violation",
+      entity_id: created.id,
+      file_path: path,
+      file_type: file.type || null,
+      uploaded_by: user.id,
+    });
+  }
+
+  await supabase.from("audit_log").insert({
+    actor_id: user.id,
+    action: "create",
+    entity_type: "violation",
+    entity_id: created.id,
+    diff: { category: parsed.data.category, status: "pending_review", source: "admin" },
+  });
+
+  revalidatePath("/admin/violations");
+  revalidatePath("/admin");
+  redirect(`/admin/violations/${created.id}`);
+}
+
 // --------------------------- Admin: status change ----------------------------
 
 const StatusSchema = z.object({
@@ -149,6 +240,14 @@ const StatusSchema = z.object({
     .max(20)
     .optional()
     .or(z.literal("")),
+  is_public: z
+    .union([
+      z.literal("on"),
+      z.literal("true"),
+      z.literal("false"),
+      z.literal(""),
+    ])
+    .optional(),
 });
 
 export async function changeViolationStatusAction(
@@ -175,6 +274,7 @@ export async function changeViolationStatusAction(
     to_status: formData.get("to_status"),
     comment: formData.get("comment") ?? "",
     fine_amount: formData.get("fine_amount") ?? "",
+    is_public: formData.get("is_public") ?? "",
   });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
 
@@ -228,6 +328,12 @@ export async function changeViolationStatusAction(
     .eq("id", violationId)
     .maybeSingle();
 
+  // Internal-only by default for non-warning transitions; admins can override.
+  // For warning/fined/resolved transitions, public is the default (the
+  // homeowner needs to see them anyway via the appeal page).
+  const isPublic =
+    parsed.data.is_public === "on" || parsed.data.is_public === "true";
+
   await supabase.from("status_events").insert({
     entity_type: "violation",
     entity_id: violationId,
@@ -235,7 +341,7 @@ export async function changeViolationStatusAction(
     from_status: fromStatus,
     to_status: toStatus,
     comment: parsed.data.comment || null,
-    is_public: true,
+    is_public: isPublic,
   });
 
   await supabase.from("audit_log").insert({
@@ -266,7 +372,8 @@ export async function changeViolationStatusAction(
   const address = property?.address ?? "your property";
   const appealUrl = `${siteUrl}/appeals/${vAfter?.appeal_token ?? v.appeal_token ?? ""}`;
 
-  if (homeownerEmail && WARNING_STATUSES.includes(toStatus)) {
+  // Only email the homeowner if the change is public-facing
+  if (isPublic && homeownerEmail && WARNING_STATUSES.includes(toStatus)) {
     await sendEmail({
       template: `violation_${toStatus}`,
       to: homeownerEmail,
@@ -284,7 +391,7 @@ export async function changeViolationStatusAction(
       relatedEntityType: "violation",
       relatedEntityId: violationId,
     }).catch((e) => console.error("violation email failed", e));
-  } else if (homeownerEmail && toStatus === "resolved") {
+  } else if (isPublic && homeownerEmail && toStatus === "resolved") {
     await sendEmail({
       template: "violation_resolved",
       to: homeownerEmail,

@@ -1,14 +1,19 @@
-export const REQUEST_TYPES = [
-  "tree_hoa_removal",
-  "tree_homeowner_permission",
-  "arc_fence",
-  "arc_paint",
-  "arc_addition",
-  "arc_shed",
-  "arc_other",
-] as const;
+/**
+ * Request types are stored in the `request_types` table so admins can
+ * add their own categories. The seeded keys live here as a type for
+ * convenience, but the source of truth is the database.
+ */
+export type RequestType = string;
 
-export type RequestType = (typeof REQUEST_TYPES)[number];
+export type RequestTypeRow = {
+  key: string;
+  label: string;
+  category: "tree" | "arc" | "other";
+  description: string | null;
+  allows_inspection: boolean;
+  is_active: boolean;
+  display_order: number;
+};
 
 export const REQUEST_STATUSES = [
   "submitted",
@@ -22,16 +27,6 @@ export const REQUEST_STATUSES = [
 
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
-export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
-  tree_hoa_removal: "Request removal of an HOA tree",
-  tree_homeowner_permission: "Request permission to remove my own tree",
-  arc_fence: "Architectural: Fence",
-  arc_paint: "Architectural: Exterior paint",
-  arc_addition: "Architectural: Addition / new structure",
-  arc_shed: "Architectural: Shed",
-  arc_other: "Architectural: Other",
-};
-
 export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
   submitted: "Submitted",
   under_review: "Under review",
@@ -40,6 +35,22 @@ export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
   approved: "Approved",
   denied: "Denied",
   withdrawn: "Withdrawn",
+};
+
+/**
+ * Fallback labels for the seeded types — used when we don't have access to
+ * the DB row (e.g. in the audit log or older data). Dynamic types added by
+ * admins will not appear here; pages that need them should join request_types
+ * and use the joined label.
+ */
+export const REQUEST_TYPE_LABEL: Record<string, string> = {
+  tree_hoa_removal: "Request removal of an HOA tree",
+  tree_homeowner_permission: "Request permission to remove my own tree",
+  arc_fence: "Architectural: Fence",
+  arc_paint: "Architectural: Exterior paint",
+  arc_addition: "Architectural: Addition / new structure",
+  arc_shed: "Architectural: Shed",
+  arc_other: "Architectural: Other",
 };
 
 export function statusBadgeClass(status: RequestStatus): string {
@@ -62,15 +73,7 @@ export function statusBadgeClass(status: RequestStatus): string {
   }
 }
 
-export function isTreeRequest(t: RequestType) {
-  return t.startsWith("tree_");
-}
-
-export function isArcRequest(t: RequestType) {
-  return t.startsWith("arc_");
-}
-
-/** Valid transitions from a status. Admins only — submitters can withdraw. */
+/** Valid transitions from a status. */
 export const ALLOWED_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   submitted: ["under_review", "needs_more_info", "denied", "approved", "withdrawn"],
   under_review: [

@@ -22,6 +22,7 @@ const NAV = [
   { href: "/admin/properties", label: "Properties", icon: Building2 },
   { href: "/admin/violations", label: "Violations", icon: AlertTriangle },
   { href: "/admin/requests", label: "Requests (trees/ARC)", icon: TreePine },
+  { href: "/admin/request-types", label: "Request types", icon: TreePine },
   { href: "/admin/events", label: "Events", icon: Calendar },
   { href: "/admin/documents", label: "Documents", icon: FileText },
   { href: "/admin/announcements", label: "Announcements", icon: Megaphone },

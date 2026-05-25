@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   revokeMemberAction,
   setAdminAction,
 } from "@/lib/actions/admin-members";
+import { LinkPropertyButton } from "@/components/admin/LinkPropertyButton";
 
 export const metadata = { title: "Members | Admin" };
 
@@ -38,13 +40,38 @@ export default async function AdminMembersPage({ searchParams }: Props) {
 
   let q = supabase
     .from("profiles")
-    .select("id, full_name, address, phone, is_approved, is_admin, created_at")
+    .select(
+      "id, full_name, address, phone, is_approved, is_admin, created_at, property_id, property:properties(id, address)"
+    )
     .order("created_at", { ascending: false });
 
   if (filter === "pending") q = q.eq("is_approved", false);
   else if (filter === "admins") q = q.eq("is_admin", true);
 
   const { data: members, error } = await q;
+
+  // Resolve auth emails for every member via service-role lookup.
+  const emailMap = new Map<string, string>();
+  if (members && members.length > 0) {
+    const admin = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+    const { data: list } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    for (const u of list?.users ?? []) {
+      if (u.email) emailMap.set(u.id, u.email);
+    }
+  }
+
+  // Fetch all properties for the link dialog
+  const { data: allProperties } = await supabase
+    .from("properties")
+    .select("id, address, linked_user_id")
+    .order("address", { ascending: true });
 
   return (
     <div className="space-y-6">
@@ -54,7 +81,8 @@ export default async function AdminMembersPage({ searchParams }: Props) {
             Members
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Approve new signups, promote admins, revoke access.
+            Approve new signups, promote admins, revoke access, link to a
+            property in the registry.
           </p>
         </div>
         <nav className="flex gap-2 text-sm">
@@ -106,8 +134,10 @@ export default async function AdminMembersPage({ searchParams }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden md:table-cell">Address</TableHead>
+                  <TableHead>Name / email</TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    Linked property
+                  </TableHead>
                   <TableHead className="hidden md:table-cell">
                     Joined
                   </TableHead>
@@ -116,79 +146,122 @@ export default async function AdminMembersPage({ searchParams }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {members!.map((m) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-medium">
-                      {m.full_name ?? <span className="italic">No name</span>}
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                      {m.address ?? "—"}
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                      {format(new Date(m.created_at), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {m.is_approved ? (
-                          <Badge variant="secondary">Approved</Badge>
+                {members!.map((m) => {
+                  // Supabase-js infers FK joins as arrays
+                  const linkedProperty = Array.isArray(m.property)
+                    ? m.property[0]
+                    : m.property;
+                  return (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium">
+                        {m.full_name ?? (
+                          <span className="italic">No name</span>
+                        )}
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {emailMap.get(m.id) ?? ""}
+                        </p>
+                      </TableCell>
+                      <TableCell className="hidden text-sm md:hidden lg:table-cell">
+                        {linkedProperty ? (
+                          <span className="text-muted-foreground">
+                            {linkedProperty.address}
+                          </span>
+                        ) : m.address ? (
+                          <span className="text-xs italic text-muted-foreground">
+                            Profile address: {m.address}
+                            <br />
+                            (not yet linked)
+                          </span>
                         ) : (
-                          <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/20">
-                            Pending
-                          </Badge>
+                          <span className="text-xs italic text-muted-foreground">
+                            (not linked)
+                          </span>
                         )}
-                        {m.is_admin && <Badge>Admin</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {!m.is_approved ? (
-                          <form action={approveMemberAction}>
-                            <input
-                              type="hidden"
-                              name="user_id"
-                              value={m.id}
-                            />
-                            <Button size="sm" type="submit">
-                              Approve
-                            </Button>
-                          </form>
-                        ) : m.id !== viewerId ? (
-                          <form action={revokeMemberAction}>
-                            <input
-                              type="hidden"
-                              name="user_id"
-                              value={m.id}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="submit"
-                            >
-                              Revoke
-                            </Button>
-                          </form>
-                        ) : null}
-                        {m.id !== viewerId && (
-                          <form action={setAdminAction}>
-                            <input type="hidden" name="user_id" value={m.id} />
-                            <input
-                              type="hidden"
-                              name="make_admin"
-                              value={m.is_admin ? "false" : "true"}
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="submit"
-                            >
-                              {m.is_admin ? "Remove admin" : "Make admin"}
-                            </Button>
-                          </form>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                        {format(new Date(m.created_at), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {m.is_approved ? (
+                            <Badge variant="secondary">Approved</Badge>
+                          ) : (
+                            <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/20">
+                              Pending
+                            </Badge>
+                          )}
+                          {m.is_admin && <Badge>Admin</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {!m.is_approved ? (
+                            <form action={approveMemberAction}>
+                              <input
+                                type="hidden"
+                                name="user_id"
+                                value={m.id}
+                              />
+                              <Button size="sm" type="submit">
+                                Approve
+                              </Button>
+                            </form>
+                          ) : m.id !== viewerId ? (
+                            <form action={revokeMemberAction}>
+                              <input
+                                type="hidden"
+                                name="user_id"
+                                value={m.id}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                              >
+                                Revoke
+                              </Button>
+                            </form>
+                          ) : null}
+                          <LinkPropertyButton
+                            userId={m.id}
+                            currentPropertyId={m.property_id ?? null}
+                            currentPropertyAddress={
+                              linkedProperty?.address ?? null
+                            }
+                            properties={(allProperties ?? []).map((p) => ({
+                              id: p.id,
+                              address: p.address,
+                              isLinkedElsewhere:
+                                Boolean(p.linked_user_id) &&
+                                p.linked_user_id !== m.id,
+                            }))}
+                          />
+                          {m.id !== viewerId && (
+                            <form action={setAdminAction}>
+                              <input
+                                type="hidden"
+                                name="user_id"
+                                value={m.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="make_admin"
+                                value={m.is_admin ? "false" : "true"}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                type="submit"
+                              >
+                                {m.is_admin ? "Remove admin" : "Make admin"}
+                              </Button>
+                            </form>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

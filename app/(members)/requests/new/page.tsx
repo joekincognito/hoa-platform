@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { NewRequestForm } from "@/components/requests/NewRequestForm";
+import type { RequestTypeRow } from "@/lib/workflow/requests";
 
 export const metadata = { title: "Submit a request" };
 
@@ -18,11 +19,18 @@ export default async function NewRequestPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("address")
-    .eq("id", user!.id)
-    .maybeSingle();
+  const [{ data: profile }, { data: types }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("address")
+      .eq("id", user!.id)
+      .maybeSingle(),
+    supabase
+      .from("request_types")
+      .select("*")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true }),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
@@ -39,13 +47,15 @@ export default async function NewRequestPage() {
         <CardHeader>
           <CardTitle>Submit a request</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Submit a request to the board: tree removal (HOA or your own) or
-            architectural approval (fence, paint, additions, sheds). You&apos;ll
-            be emailed when the status changes.
+            Submit a request to the board. You&apos;ll be emailed when the
+            status changes.
           </p>
         </CardHeader>
         <CardContent>
-          <NewRequestForm defaultAddress={profile?.address ?? ""} />
+          <NewRequestForm
+            defaultAddress={profile?.address ?? ""}
+            types={(types ?? []) as RequestTypeRow[]}
+          />
         </CardContent>
       </Card>
     </div>

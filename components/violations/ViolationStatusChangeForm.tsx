@@ -129,6 +129,19 @@ export function ViolationStatusChangeForm({
         </div>
       )}
 
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="is_public"
+          defaultChecked
+          className="h-4 w-4 rounded border-input"
+        />
+        <span>
+          Notify homeowner by email & show on the appeal page (uncheck for an
+          internal-only board note)
+        </span>
+      </label>
+
       {willEmailHomeowner && !hasHomeownerEmail && (
         <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm text-yellow-800 dark:text-yellow-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -138,13 +151,6 @@ export function ViolationStatusChangeForm({
             registry to enable notifications.
           </span>
         </div>
-      )}
-
-      {willEmailHomeowner && hasHomeownerEmail && (
-        <p className="text-xs text-muted-foreground">
-          ✉ An email will be sent to the homeowner-of-record with the appeal
-          link.
-        </p>
       )}
 
       <div className="flex justify-end">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,19 +17,13 @@ import {
   createRequestAction,
   type NewRequestState,
 } from "@/lib/actions/requests";
-import {
-  REQUEST_TYPE_LABEL,
-  type RequestType,
-} from "@/lib/workflow/requests";
+import type { RequestTypeRow } from "@/lib/workflow/requests";
 
-const TREE_TYPES: RequestType[] = ["tree_hoa_removal", "tree_homeowner_permission"];
-const ARC_TYPES: RequestType[] = [
-  "arc_fence",
-  "arc_paint",
-  "arc_addition",
-  "arc_shed",
-  "arc_other",
-];
+const CATEGORY_HEADER: Record<RequestTypeRow["category"], string> = {
+  tree: "Tree",
+  arc: "Architectural review",
+  other: "Other",
+};
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -42,15 +36,44 @@ function Submit() {
 
 export function NewRequestForm({
   defaultAddress,
+  types,
 }: {
   defaultAddress: string;
+  types: RequestTypeRow[];
 }) {
   const [state, run] = useActionState<NewRequestState | undefined, FormData>(
     createRequestAction,
     undefined
   );
-  const [type, setType] = useState<RequestType>("tree_hoa_removal");
-  const isTree = type.startsWith("tree_");
+
+  const grouped = useMemo(() => {
+    const out: Record<RequestTypeRow["category"], RequestTypeRow[]> = {
+      tree: [],
+      arc: [],
+      other: [],
+    };
+    for (const t of types) {
+      out[t.category].push(t);
+    }
+    return out;
+  }, [types]);
+
+  const [type, setType] = useState<string>(types[0]?.key ?? "");
+  const selectedType = types.find((t) => t.key === type);
+  const isTree = selectedType?.category === "tree";
+
+  if (types.length === 0) {
+    return (
+      <div className="rounded-md border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm">
+        <p className="font-medium text-yellow-800 dark:text-yellow-300">
+          No request types available yet.
+        </p>
+        <p className="mt-1 text-muted-foreground">
+          Ask an admin to add some at <code>/admin/request-types</code>.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form action={run} className="space-y-6">
@@ -58,29 +81,32 @@ export function NewRequestForm({
 
       <div>
         <Label>What kind of request?</Label>
-        <Select value={type} onValueChange={(v) => setType(v as RequestType)}>
-          <SelectTrigger className="mt-1">
+        <Select value={type} onValueChange={(v) => v && setType(v)}>
+          <SelectTrigger className="mt-1 w-full">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Tree
-            </div>
-            {TREE_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {REQUEST_TYPE_LABEL[t]}
-              </SelectItem>
-            ))}
-            <div className="mt-1 px-2 py-1 text-xs font-medium text-muted-foreground">
-              Architectural review
-            </div>
-            {ARC_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {REQUEST_TYPE_LABEL[t]}
-              </SelectItem>
-            ))}
+          <SelectContent className="min-w-[var(--anchor-width)] w-max max-w-[90vw]">
+            {(["tree", "arc", "other"] as const).map((cat) =>
+              grouped[cat].length === 0 ? null : (
+                <div key={cat}>
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {CATEGORY_HEADER[cat]}
+                  </div>
+                  {grouped[cat].map((t) => (
+                    <SelectItem key={t.key} value={t.key}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </div>
+              )
+            )}
           </SelectContent>
         </Select>
+        {selectedType?.description && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {selectedType.description}
+          </p>
+        )}
       </div>
 
       <div>
