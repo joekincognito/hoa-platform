@@ -63,3 +63,56 @@ export async function autoLinkProfileToProperty(
 
   return { linked: true, propertyId: match.id };
 }
+
+/**
+ * Mirror of autoLinkProfileToProperty, but driven from the property side.
+ * When an admin adds/updates a property, find any profile whose address
+ * matches and link them.
+ */
+export async function autoLinkPropertyToProfile(
+  propertyId: string,
+  address: string
+): Promise<{ linked: boolean; userId?: string }> {
+  if (!address || !address.trim()) return { linked: false };
+
+  const admin = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  // Find a profile whose address case-insensitively matches.
+  // If there are multiple (shouldn't happen normally), pick the most recently
+  // created — assumption is they're the current resident.
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id, property_id, address")
+    .ilike("address", address.trim())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!profile) return { linked: false };
+  if (profile.property_id === propertyId) {
+    return { linked: true, userId: profile.id };
+  }
+
+  // Clear any other property the user was linked to
+  if (profile.property_id) {
+    await admin
+      .from("properties")
+      .update({ linked_user_id: null })
+      .eq("id", profile.property_id);
+  }
+
+  await admin
+    .from("profiles")
+    .update({ property_id: propertyId })
+    .eq("id", profile.id);
+  await admin
+    .from("properties")
+    .update({ linked_user_id: profile.id })
+    .eq("id", propertyId);
+
+  return { linked: true, userId: profile.id };
+}

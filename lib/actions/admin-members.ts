@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { autoLinkProfileToProperty } from "@/lib/actions/auto-link";
 
 const TargetSchema = z.object({
   user_id: z.string().uuid(),
@@ -36,7 +37,22 @@ export async function approveMemberAction(formData: FormData) {
     .update({ is_approved: true })
     .eq("id", parsed.data.user_id);
 
+  // Safety-net auto-link in case the signup trigger didn't fire (older
+  // accounts) or the property was added after signup. Idempotent — does
+  // nothing if already linked or no match exists.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("address, property_id")
+    .eq("id", parsed.data.user_id)
+    .maybeSingle();
+  if (profile?.address && !profile.property_id) {
+    await autoLinkProfileToProperty(parsed.data.user_id, profile.address).catch(
+      (e) => console.error("post-approve auto-link failed", e)
+    );
+  }
+
   revalidatePath("/admin/members");
+  revalidatePath("/admin/properties");
   revalidatePath("/admin");
 }
 

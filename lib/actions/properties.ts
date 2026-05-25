@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { autoLinkPropertyToProfile } from "@/lib/actions/auto-link";
 
 const PropertySchema = z.object({
   address: z.string().trim().min(1, "Address required").max(300),
@@ -67,9 +68,20 @@ export async function createPropertyAction(
     };
   }
   const supabase = await requireAdmin();
-  const { error } = await supabase.from("properties").insert(toRow(parsed.data));
-  if (error) return { ok: false, error: error.message };
+  const { data: created, error } = await supabase
+    .from("properties")
+    .insert(toRow(parsed.data))
+    .select("id, address")
+    .single();
+  if (error || !created) return { ok: false, error: error?.message };
+
+  // Auto-link any profile whose address matches this new property
+  await autoLinkPropertyToProfile(created.id, created.address).catch((e) =>
+    console.error("auto-link from create-property failed", e)
+  );
+
   revalidatePath("/admin/properties");
+  revalidatePath("/admin/members");
   return { ok: true };
 }
 
@@ -93,7 +105,14 @@ export async function updatePropertyAction(
     .update(toRow(parsed.data))
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
+
+  // Address may have changed — re-attempt the link
+  await autoLinkPropertyToProfile(id, parsed.data.address).catch((e) =>
+    console.error("auto-link from update-property failed", e)
+  );
+
   revalidatePath("/admin/properties");
+  revalidatePath("/admin/members");
   return { ok: true };
 }
 
@@ -247,7 +266,7 @@ export async function importCsvAction(rowsJson: string): Promise<CsvImportState>
     return { error: "Nothing to import." };
   }
   const supabase = await requireAdmin();
-  const { error } = await supabase
+  const { data: upserted, error } = await supabase
     .from("properties")
     .upsert(
       rows.map((r) => ({
@@ -258,9 +277,20 @@ export async function importCsvAction(rowsJson: string): Promise<CsvImportState>
         notes: r.notes ?? null,
       })),
       { onConflict: "address" }
-    );
+    )
+    .select("id, address");
 
   if (error) return { error: error.message };
+
+  // For each imported property, see if there's a profile already in the
+  // system whose address matches — link them.
+  for (const row of upserted ?? []) {
+    await autoLinkPropertyToProfile(row.id, row.address).catch((e) =>
+      console.error("auto-link from CSV import failed", e)
+    );
+  }
+
   revalidatePath("/admin/properties");
+  revalidatePath("/admin/members");
   return { imported: rows.length };
 }

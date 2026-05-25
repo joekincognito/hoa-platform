@@ -22,7 +22,6 @@ import {
   revokeMemberAction,
   setAdminAction,
 } from "@/lib/actions/admin-members";
-import { LinkPropertyButton } from "@/components/admin/LinkPropertyButton";
 
 export const metadata = { title: "Members | Admin" };
 
@@ -66,12 +65,6 @@ export default async function AdminMembersPage({ searchParams }: Props) {
       if (u.email) emailMap.set(u.id, u.email);
     }
   }
-
-  // Fetch all properties for the link dialog
-  const { data: allProperties } = await supabase
-    .from("properties")
-    .select("id, address, linked_user_id")
-    .order("address", { ascending: true });
 
   return (
     <div className="space-y-6">
@@ -222,20 +215,6 @@ export default async function AdminMembersPage({ searchParams }: Props) {
                               </Button>
                             </form>
                           ) : null}
-                          <LinkPropertyButton
-                            userId={m.id}
-                            currentPropertyId={m.property_id ?? null}
-                            currentPropertyAddress={
-                              linkedProperty?.address ?? null
-                            }
-                            properties={(allProperties ?? []).map((p) => ({
-                              id: p.id,
-                              address: p.address,
-                              isLinkedElsewhere:
-                                Boolean(p.linked_user_id) &&
-                                p.linked_user_id !== m.id,
-                            }))}
-                          />
                           {m.id !== viewerId && (
                             <form action={setAdminAction}>
                               <input
